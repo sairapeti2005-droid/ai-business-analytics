@@ -2,17 +2,84 @@ from forecasting import show_forecast_test
 import streamlit as st
 import pandas as pd
 import os
+import hashlib
 import json
 from pathlib import Path
 from dotenv import load_dotenv
 from google import genai
 
 load_dotenv(Path(__file__).with_name(".env"))
+
 st.set_page_config(
     page_title="AI Business Analytics Assistant",
     page_icon="📊",
     layout="wide"
 )
+def get_ai_answer(api_key, prompt):
+    model_name = "gemini-3.8-flash"
+
+    # Keep cached answers within this user's Streamlit session.
+    if "ai_answer_cache" not in st.session_state:
+        st.session_state["ai_answer_cache"] = {}
+
+    cache = st.session_state["ai_answer_cache"]
+
+    cache_key = hashlib.sha256(
+        (api_key + model_name + prompt).encode("utf-8")
+    ).hexdigest()
+
+    if cache_key in cache:
+        return cache[cache_key]
+
+    try:
+        client = genai.Client(api_key=api_key)
+
+        response = client.interactions.create(
+            model=model_name,
+            input=prompt
+        )
+
+        answer = response.output_text
+
+        if not answer:
+            st.warning("Gemini returned no text. Please try again later.")
+            return None
+
+        # Store only successful answers, up to 20 per session.
+        if len(cache) >= 20:
+            del cache[next(iter(cache))]
+
+        cache[cache_key] = answer
+        return answer
+
+    except Exception as error:
+        error_code = getattr(
+            error, "code",
+            getattr(error, "status_code", None)
+        )
+
+        if (
+            str(error_code) == "429"
+            or type(error).__name__ == "RateLimitError"
+        ):
+            st.warning(
+                "Gemini's rate or quota limit has been reached. "
+                "Please try after the applicable limit resets. "
+                "The dashboard and forecasting remain available."
+            )
+        else:
+            st.error(
+                "Gemini could not complete the request. "
+                "Check the server logs for details."
+            )
+
+        safe_message = str(error).replace(api_key, "[REDACTED]")
+        print(
+            f"Gemini error: {type(error).__name__}: {safe_message}",
+            flush=True
+        )
+
+        return None
 
 st.title("📊 AI Business Analytics Assistant")
 st.write("Upload your sales dataset to get started.")
@@ -362,44 +429,16 @@ if st.button("Generate AI Insights"):
                 + json.dumps(summary, ensure_ascii=False, allow_nan=False)
             )
 
-            try:
-                with st.spinner("Generating insights..."):
-                    client = genai.Client(api_key=api_key)
+            with st.spinner("Preparing insights..."):
+                answer = get_ai_answer(api_key, prompt)
 
-                    response = client.interactions.create(
-                        model="gemini-3.8-flash",
-                        input=prompt
-                    )
-
-                if response.output_text:
-                    st.markdown(response.output_text)
-                    st.caption(
-                        "AI-generated explanation. Verify it against "
-                        "the calculated summary."
-                    )
-                else:
-                    st.warning("Gemini returned no text. Please try again.")
-
-            except Exception as error:
-                error_type = type(error).__name__
-                error_code = getattr(
-                    error, "code",
-                    getattr(error, "status_code", "Not provided")
+            if answer:
+                st.markdown(answer)
+                st.caption(
+                    "AI-generated explanation. Verify it against "
+                    "the calculated summary."
                 )
 
-                safe_message = str(error).replace(
-                    api_key, "[REDACTED]"
-                )
-
-                print(
-                    f"Gemini insights error: {error_type}: {safe_message}",
-                    flush=True
-                )
-
-                st.error(
-                    f"Insights failed — {error_type}. "
-                    f"Code: {error_code}. See server logs for details."
-                )
 # Answer questions about the selected sales data.
 st.subheader("Ask a Business Question")
 
@@ -500,38 +539,15 @@ if ask_clicked:
                 + question.strip()
             )
 
-            try:
-                with st.spinner("Preparing your answer..."):
-                    client = genai.Client(api_key=api_key)
+            with st.spinner("Preparing your answer..."):
+                answer = get_ai_answer(api_key, question_prompt)
 
-                    response = client.interactions.create(
-                        model="gemini-3.8-flash",
-                        input=question_prompt
-                    )
-
-                if response.output_text:
-                    st.markdown(response.output_text)
-                    st.caption(
-                        "AI-generated answer. Check the supporting data."
-                    )
-                else:
-                    st.warning("No answer returned. Please try again.")
-
-            except Exception as error:
-                safe_message = str(error).replace(
-                    api_key, "[REDACTED]"
+            if answer:
+                st.markdown(answer)
+                st.caption(
+                    "AI-generated answer. Check the supporting data."
                 )
 
-                print(
-                    f"Gemini insights error: "
-                    f"{type(error).__name__}: {safe_message}",
-                    flush=True
-                )
-
-                st.error(
-                    "Could not generate insights. "
-                    "Check the Streamlit server logs for details."
-                )
 show_forecast_test(filtered_df)
 # Download the complete cleaned dataset.
 st.download_button(
