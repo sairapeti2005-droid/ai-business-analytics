@@ -503,9 +503,20 @@ if ask_clicked:
                     st.warning("No answer returned. Please try again.")
 
             except Exception as error:
-                error_code = getattr(error, "code", "Unavailable")
+                # Put diagnostic details in server logs.
+                safe_message = str(error).replace(
+                    api_key, "[REDACTED]"
+                )
+
+                print(
+                    f"Gemini question error: "
+                    f"{type(error).__name__}: {safe_message}",
+                    flush=True
+                )
+
                 st.error(
-                    f"Could not answer the question. Error code: {error_code}"
+                    "Could not answer the question. "
+                    "Check the Streamlit server logs for details."
                 )
 show_forecast_test(filtered_df)
 # Download the complete cleaned dataset.
