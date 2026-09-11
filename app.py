@@ -503,19 +503,18 @@ if ask_clicked:
                     st.warning("No answer returned. Please try again.")
 
             except Exception as error:
-                # Put diagnostic details in server logs.
                 safe_message = str(error).replace(
                     api_key, "[REDACTED]"
                 )
 
                 print(
-                    f"Gemini question error: "
+                    f"Gemini insights error: "
                     f"{type(error).__name__}: {safe_message}",
                     flush=True
                 )
 
                 st.error(
-                    "Could not answer the question. "
+                    "Could not generate insights. "
                     "Check the Streamlit server logs for details."
                 )
 show_forecast_test(filtered_df)
