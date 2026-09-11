@@ -381,9 +381,24 @@ if st.button("Generate AI Insights"):
                     st.warning("Gemini returned no text. Please try again.")
 
             except Exception as error:
-                error_code = getattr(error, "code", "Unavailable")
+                error_type = type(error).__name__
+                error_code = getattr(
+                    error, "code",
+                    getattr(error, "status_code", "Not provided")
+                )
+
+                safe_message = str(error).replace(
+                    api_key, "[REDACTED]"
+                )
+
+                print(
+                    f"Gemini insights error: {error_type}: {safe_message}",
+                    flush=True
+                )
+
                 st.error(
-                    f"Could not generate insights. Error code: {error_code}"
+                    f"Insights failed — {error_type}. "
+                    f"Code: {error_code}. See server logs for details."
                 )
 # Answer questions about the selected sales data.
 st.subheader("Ask a Business Question")
